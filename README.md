@@ -24,27 +24,22 @@ HTML report.
 ```
 clinical-trial-matching-skill/
 ├── SKILL.md                    # The skill definition (drop into ~/.claude/skills/)
-├── LICENSE                     # MIT (CancerDAO additions)
-├── NOTICE.md                   # Third-party attributions
+├── LICENSE                     # MIT
+├── NOTICE.md                   # Attribution
+├── scripts/
+│   └── setup-chictr-mcp.sh    # One-command ChiCTR MCP installer
 └── repo/
-    ├── LICENSE.NCBI-TrialGPT   # NCBI public-domain notice + required citation
-    ├── README.md               # Original NCBI TrialGPT README
-    ├── requirements.txt
+    ├── README.md               # Notes on the (now-removed) NCBI lineage
     ├── trialgpt_retrieval/
-    │   ├── dual_source_search.py      # ← CancerDAO: parallel NCT + ChiCTR search
-    │   ├── hybrid_fusion_retrieval.py
-    │   └── keyword_generation.py
-    ├── trialgpt_matching/             # NCBI TrialGPT-Matching
-    ├── trialgpt_ranking/              # NCBI TrialGPT-Ranking
+    │   └── dual_source_search.py      # Parallel NCT + ChiCTR search (stdlib only)
     └── trialgpt_report/
-        └── template.html              # ← CancerDAO: 8-section HTML report
+        └── template.html              # 8-section HTML report
 ```
 
-The TREC-2021 / TREC-2022 / SIGIR evaluation datasets from upstream NCBI
-TrialGPT are **not** included here — they're large and unnecessary for the
-matching skill. Grab them from
-[ncbi-nlp/TrialGPT](https://github.com/ncbi-nlp/TrialGPT) if you want to
-reproduce benchmarks.
+All LLM reasoning (keyword generation, criterion-level evaluation,
+ranking, report writing) is performed by Claude in the conversation —
+the only Python in this repo is the parallel HTTP retriever, which uses
+nothing but the standard library.
 
 ---
 
@@ -75,36 +70,48 @@ cp -r clinical-trial-matching-skill/SKILL.md \
       ~/.claude/skills/trialgpt-matching/
 ```
 
-### 2. Install Python dependencies
+### 2. (Skipped — no Python deps to install)
 
-```bash
-cd ~/.claude/skills/trialgpt-matching/repo
-pip install -r requirements.txt
-```
+The dual-source retriever (`repo/trialgpt_retrieval/dual_source_search.py`)
+uses only Python stdlib (`urllib`, `concurrent.futures`). All LLM reasoning
+— keyword generation, criterion-level eligibility evaluation, ranking,
+and report writing — is performed by Claude in the conversation, not by a
+separate Python LLM client. So there is **no `pip install` step and no
+LLM API key to configure**. Just make sure you have Python 3.9+ on PATH.
 
-Requires Python 3.9+.
+> Earlier releases vendored the upstream NCBI TrialGPT package, which
+> shipped 13 Python deps (torch / faiss / transformers / openai / …) and
+> required an Azure OpenAI key. None of that code was actually invoked by
+> the skill workflow, so it has been removed.
 
-### 3. Install the ChiCTR MCP server (required for Chinese trials)
+### 3. Register the ChiCTR MCP server (one command)
 
 The ChiCTR data source is provided by the external
 [chictr-mcp-server](https://github.com/PancrePal-xiaoyibao/chictr-mcp-server)
-project. It is **not** vendored into this repo — install it separately.
+(TypeScript + Puppeteer). It can't be vendored into this repo — chictr.org.cn
+has no public JSON API and requires real browser automation for queries.
 
-**Option A — run via npx (recommended):**
-
-```bash
-npx -y chictr-mcp-server
-```
-
-**Option B — build from source:**
+Run the bundled installer instead of editing `~/.claude.json` by hand:
 
 ```bash
-git clone https://github.com/PancrePal-xiaoyibao/chictr-mcp-server.git
-cd chictr-mcp-server && npm install && npm run build && npm start
+bash scripts/setup-chictr-mcp.sh
 ```
 
-Then register it in Claude Code's MCP config (`~/.claude.json` or a
-project-level `.mcp.json`):
+The script is idempotent. It:
+
+1. Verifies Node.js ≥ 18 is on PATH (npx ships with Node).
+2. Adds (or no-ops if present) the `chictr` entry under `mcpServers` in
+   `~/.claude.json` — keeps every other MCP server you have untouched.
+3. Smoke-tests `npx -y chictr-mcp-server` to confirm the npm package is
+   reachable.
+
+Then **restart Claude Code** so it picks up the new MCP server, and verify
+these tools appear in a new session:
+
+- `mcp__chictr__search_trials`
+- `mcp__chictr__get_trial_detail`
+
+If you'd rather configure manually, the equivalent JSON is:
 
 ```json
 {
@@ -117,19 +124,8 @@ project-level `.mcp.json`):
 }
 ```
 
-Requires Node.js ≥ 18. Restart Claude Code and verify these tools show up:
-
-- `mcp__chictr__search_trials`
-- `mcp__chictr__get_trial_detail`
-
 If the MCP server is unavailable, the skill will degrade gracefully and run
 with ClinicalTrials.gov only.
-
-### 4. Configure an LLM API key
-
-The underlying TrialGPT modules call an LLM for criterion-level matching.
-See `repo/README.md` for upstream configuration details (OpenAI / Azure /
-compatible endpoints).
 
 ---
 
@@ -160,14 +156,14 @@ See `SKILL.md` for the full workflow and prompt contract.
 ## License & attribution
 
 - **CancerDAO additions** (the skill definition, dual-source orchestrator,
-  HTML report, workflow, and grading rules): [MIT](./LICENSE)
-- **NCBI TrialGPT** (`repo/trialgpt_matching`, `repo/trialgpt_ranking`,
-  parts of `repo/trialgpt_retrieval`): U.S. Government Work in the public
-  domain. See `repo/LICENSE.NCBI-TrialGPT` and please cite:
-
-  > Jin Q. et al. *Matching Patients to Clinical Trials with Large Language
-  > Models.*
-
+  HTML report, workflow, hard grading rules R1–R5, and the criterion-level
+  CoT prompt contract): [MIT](./LICENSE)
+- **NCBI TrialGPT** (Jin Q. et al., *Matching Patients to Clinical Trials
+  with Large Language Models*): the original NCBI Python package is no
+  longer vendored — its retrieval/matching/ranking modules were unused by
+  this skill's workflow. The 8-dimension keyword strategy and
+  criterion-level evaluation pattern are conceptually inspired by their
+  paper; please cite it if you build on this work.
 - **chictr-mcp-server** is an external dependency maintained by
   [PancrePal-xiaoyibao](https://github.com/PancrePal-xiaoyibao/chictr-mcp-server).
 

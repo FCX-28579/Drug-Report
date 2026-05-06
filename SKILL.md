@@ -364,42 +364,45 @@ results = execute_search_plan(plan_dict, chictr_results=chictr_data)
 
 在执行本 skill 之前，**必须先检查 chictr-mcp-server 是否已安装并配置**。
 
+> **为什么需要 chictr-mcp-server?**
+> chictr.org.cn 不提供公开 JSON API、且页面需要 JS 渲染并有反爬保护，
+> 所以无法用纯 HTTP 抓取。chictr-mcp-server (TypeScript + Puppeteer)
+> 已经处理了浏览器自动化、验证码检测、会话管理、熔断器等问题，是当前
+> 最可靠的 ChiCTR 接入方式。本 skill 不内嵌它，但会自动帮用户把它注册
+> 到 Claude Code 的 MCP 配置里。
+
 ### 自动检测流程
 
 执行本 skill 时，按以下步骤检测 chictr-mcp-server 是否可用：
 
-1. **检查 MCP 工具是否可用**: 尝试调用 `mcp__chictr__search_trials` 或 `chictr_search_trials`。如果工具存在且可调用，说明 chictr-mcp-server 已配置，跳到工作流 Step 1。
-2. **如果工具不可用**: 说明 chictr-mcp-server 未安装或未配置，**必须先完成以下安装步骤**，否则 ChiCTR 数据源将不可用（仅能查询 ClinicalTrials.gov）。
+1. **检查 MCP 工具是否可用**: 尝试调用 `mcp__chictr__search_trials`。如果工具存在且可调用，跳到工作流 Step 1。
+2. **如果工具不可用**: 让用户运行 skill 自带的一键安装脚本（见下），脚本完成后必须 **重启 Claude Code 会话** 才能让新 MCP server 生效。
+3. **如果用户拒绝安装或安装失败**: 降级到仅 ClinicalTrials.gov，并在最终报告中明确标注 "ChiCTR 数据源不可用"。
 
-### 安装 chictr-mcp-server
+### 一键安装（推荐用户执行）
 
-> 项目地址: https://github.com/PancrePal-xiaoyibao/chictr-mcp-server
+skill 仓库自带 `scripts/setup-chictr-mcp.sh`，幂等，可重复执行。它会：
 
-#### 方式 1: npx 直接运行（推荐）
-
-无需手动克隆仓库，通过 npx 自动拉取并运行：
-
-```bash
-npx -y chictr-mcp-server
-```
-
-#### 方式 2: 本地编译
+- 检查 Node.js ≥ 18
+- 在 `~/.claude.json` 的 `mcpServers` 里 add/merge `chictr` 条目
+- 通过 `npx -y chictr-mcp-server` 验证 npm 包可达
+- 引导用户重启 Claude Code
 
 ```bash
-git clone https://github.com/PancrePal-xiaoyibao/chictr-mcp-server.git
-cd chictr-mcp-server
-npm install
-npm run build
-npm start
+# 从 skill 安装目录运行
+bash ~/.claude/skills/trialgpt-matching/scripts/setup-chictr-mcp.sh
+
+# 或从 git clone 下来的仓库运行
+bash scripts/setup-chictr-mcp.sh
 ```
 
-### 配置 MCP Server
+执行成功后，**关闭并重开 Claude Code 会话**，再次调用本 skill 时会自动检测到 MCP 工具。
 
-安装完成后，需要在 Claude Code 的 MCP 配置中注册 chictr server。
+### 手动配置（如果一键脚本不可用）
 
-#### Claude Code 配置
+> 仅当 `setup-chictr-mcp.sh` 执行失败时使用。
 
-在项目根目录的 `.mcp.json` 或全局 `~/.claude.json` 中添加：
+在全局 `~/.claude.json` 或项目根目录的 `.mcp.json` 中添加：
 
 ```json
 {
@@ -412,16 +415,16 @@ npm start
 }
 ```
 
-#### 验证安装
+### 验证安装
 
-配置完成后，重启 Claude Code 会话，然后验证以下工具是否可用：
+重启 Claude Code 会话后，验证以下工具是否可用：
 - `mcp__chictr__search_trials` — 搜索 ChiCTR 临床试验
 - `mcp__chictr__get_trial_detail` — 查询试验详情
 
-如果工具可用，chictr-mcp-server 配置成功。如果不可用，请检查：
-- Node.js 版本 ≥ 18
-- npx 命令是否在 PATH 中
-- 网络是否可访问 npmjs.com 和 chictr.org.cn
+如果工具不可用，请检查：
+- Node.js 版本 ≥ 18 (`node --version`)
+- npx 命令在 PATH 中 (`which npx`)
+- 网络可访问 npmjs.com 和 chictr.org.cn
 
 ## 使用示例
 
