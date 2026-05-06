@@ -7,4 +7,3 @@ venv/
 .DS_Store
 repo/dataset/
 results/*.json
-!repo/results/__init__.py
