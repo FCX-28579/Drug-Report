@@ -1,5 +1,5 @@
 ---
-name: trialgpt-matching
+name: clinical-trial-matching-skill
 description: Trial shortlist with dual-source search (ClinicalTrials.gov + ChiCTR)
 keywords:
   - retrieval
@@ -390,7 +390,7 @@ skill 仓库自带 `scripts/setup-chictr-mcp.sh`，幂等，可重复执行。�
 
 ```bash
 # 从 skill 安装目录运行
-bash ~/.claude/skills/trialgpt-matching/scripts/setup-chictr-mcp.sh
+bash ~/.claude/skills/clinical-trial-matching-skill/scripts/setup-chictr-mcp.sh
 
 # 或从 git clone 下来的仓库运行
 bash scripts/setup-chictr-mcp.sh

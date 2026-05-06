@@ -64,19 +64,16 @@ Drop the skill into your Claude Code skills directory:
 
 ```bash
 git clone https://github.com/CancerDAO/clinical-trial-matching-skill.git
-mkdir -p ~/.claude/skills/trialgpt-matching
+mkdir -p ~/.claude/skills/clinical-trial-matching-skill
 cp -r clinical-trial-matching-skill/SKILL.md \
       clinical-trial-matching-skill/repo \
       clinical-trial-matching-skill/scripts \
-      ~/.claude/skills/trialgpt-matching/
+      ~/.claude/skills/clinical-trial-matching-skill/
 ```
 
-> **Note on names.** The GitHub repo is `clinical-trial-matching-skill`,
-> but the Claude Code skill identifier (set in `SKILL.md` frontmatter and
-> used as the install directory) is `trialgpt-matching`. To invoke it,
-> just describe the task in natural language ("帮我做临床试验匹配", "shortlist
-> trials for this patient") — Claude will trigger the skill on `description`
-> match. No slash command is needed.
+To invoke the skill, just describe the task in natural language —
+"帮我做临床试验匹配", "shortlist trials for this patient", etc. Claude
+will trigger it on `description` match. No slash command is needed.
 
 ### 2. (Skipped — no Python deps to install)
 
