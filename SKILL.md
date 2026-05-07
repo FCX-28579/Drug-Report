@@ -1,20 +1,58 @@
 ---
 name: clinical-trial-matching-skill
-description: Trial shortlist with dual-source search (ClinicalTrials.gov + ChiCTR)
+description: Decision-grade trial matching with dual-source search + structured metadata + feasibility scoring + vs SoC + Goals of Care (v1.6.0).
 keywords:
   - retrieval
   - ranking
+  - feasibility
+  - decision-report
   - ClinicalTrials
   - ChiCTR
   - patient-profile
   - clinical-trial-matching
   - 中国临床试验
-measurable_outcome: Produce ≥5 matched trials (when available) with rationale + missing-data notes within 3 minutes of receiving a patient query.
+  - vs-standard-of-care
+measurable_outcome: Produce ≥1 actionable decision path with vs-SoC head-to-head, feasibility score, risk profile, timeline, and Goals-of-Care discussion within 5 minutes; eval-runner-verified.
 license: MIT
 metadata:
   author: CancerDAO
   inspired_by: NCBI TrialGPT (ncbi-nlp/TrialGPT)
-  version: "1.5.0"
+  version: "1.7.1"
+  generalization_principle: "Code is mechanism. Data is knowledge. Adding a new cancer / drug class / chemo regimen = data file edit, never a code edit."
+  changelog:
+    "1.7.1":
+      - "G1 — Externalized clinical ontology to data/clinical_ontology.json (cancer aliases, anti-aliases, OS thresholds, chemo regimens, therapy classes, biomarker aliases)"
+      - "G2 — Refactored scoring/gating.py to use ontology_loader (no hard-coded cancer aliases)"
+      - "G3 — Refactored synthesis/decision_paths.py + goals_of_care.py + efficacy_lookup.py to use ontology"
+      - "G4 — Validated generalization on 3 cases: PDAC G12D, PDAC G12C, NSCLC EGFR — all pass"
+      - "G5 — Added evaluate_targeted_therapy_class_overlap (generalizes chemo overlap to all targeted-therapy classes incl. EGFR-TKI, ALK, PARP, CDK4/6)"
+      - "G6 — Added data/EXTENSION_GUIDE.md (how to add a new cancer without code change)"
+      - "Eval framework: must_match_keywords semantic = ANY (≥min_keyword_hits); generalized must_have_*_path checks for KRAS G12D, KRAS G12C, EGFR, arbitrary risk_keys"
+      - "Data: NSCLC SoC 2L benchmarks added (post-osimertinib); EGFR 4th-gen + bispecific + HER3 ADC risk profiles"
+    "1.7.0":
+      - "P0.1 — Demotion rule: predicted ORR/PFS < SoC → demote (cell therapy DoR exemption)"
+      - "P0.2 — Cancer-type strict gate at match stage (catches NET / broad-bucket trials)"
+      - "P0.3 — Chemo backbone overlap penalty (catches NCT07409272 mFOLFIRINOX after FOLFIRINOX failure)"
+      - "P1.1 — Path rationale alternatives_comparison ('why this over X/Y')"
+      - "P1.2 — Visual distinction: real (NCT-level) vs class-estimate vs drug-match data"
+      - "P1.3 — consequences_of_skipping field per path"
+      - "v17_summary in Decision Report (chemo_overlap_count + phase3_rct_count + demoted_count)"
+      - "Phase 3 randomization risk flag (placebo / control-arm assignment risk)"
+      - "Risk taxonomy expanded: TSN1611, ASP5834, JNJ-92044570 etc."
+    "1.6.0":
+      - "P0.1 — Decision Report (Top N) + Match List dual-layer output"
+      - "P0.2 — 5-dim feasibility scoring (recruiting, geo, time, financial, slot)"
+      - "P0.3 — Blocker vs Advisor gating (HLA, treatment-line, biomarker)"
+      - "P0.4 — Structured trial metadata extraction (replaces v1.5 keyword line_info)"
+      - "P1.1 — Efficacy database (NCT-level + drug-class baselines)"
+      - "P1.2 — vs Standard of Care head-to-head (PDAC/NSCLC/CRC)"
+      - "P1.3 — Risk taxonomy (mechanism × cancer)"
+      - "P2.1 — Patient profile internal-consistency check"
+      - "P2.2 — Goals of Care trigger module"
+      - "P2.3 — Enhanced NCT verification (status + condition + intervention + citations)"
+      - "P2.4 — Golden test cases + eval-runner with semantic checks"
+      - "M1 — ChiCTR retry/circuit-breaker wrapper"
+      - "M3 — search_plan disease_stage_filter"
 compatibility:
   - system: Python 3.9+
   - external: chictr-mcp-server (required for ChiCTR search)
@@ -25,10 +63,10 @@ allowed-tools:
   - chictr_get_trial_detail
 ---
 
-# TrialGPT Matching (VitaClaw Enhanced)
+# Clinical Trial Matching Skill (v1.6.0 — Decision-Grade)
 
-Run the TrialGPT pipeline to retrieve, match, and explain candidate trials for a patient before deeper eligibility review.
-Enhanced with **dual-source search** to cover both ClinicalTrials.gov and ChiCTR (中国临床试验注册中心).
+Run the v1.6 pipeline to retrieve, match, score, and **synthesize actionable decision paths** for a patient.
+v1.6 upgrades v1.5 from "find trials" to "**support decisions**" with vs-SoC head-to-head, feasibility scoring, risk profile, and Goals-of-Care triggering.
 
 ## 数据源说明
 
@@ -132,12 +170,43 @@ HTML 报告模板位于: `repo/report/template.html`
 - **不输出"优先推荐行动"章节** — 不做治疗推荐。可输出"临床中心信息"供患者参考就医路径。
 - **提供研究者信息** — 如患者需自行联系，应提供研究者姓名、医院、科室信息。
 
-## 工作流 (Enhanced v1.2) — LLM + 脚本协作
+## 工作流 (v1.6.0) — LLM + 9-stage Python pipeline
 
-本 skill 采用 **LLM 负责临床推理 + 脚本负责并行执行** 的协作模式:
+v1.6 把 v1.5 的"LLM + 单脚本"模式扩展为 **LLM + 9 个独立模块**，每个模块负责一个明确职责，可单独 CLI 调用，也可整体编排：
 
-- **LLM 做什么**: 读取病历 → 提取患者画像 → 生成结构化检索计划 (search plan JSON) → 分析匹配结果 → 撰写报告
-- **脚本做什么**: 接收关键词 JSON → 并行查询 ClinicalTrials.gov API + ChiCTR → 去重 → 硬筛选 → 返回结构化结果
+- **LLM 做什么**: 读取病历 → 患者画像 → 生成 search_plan.json → 阅读 Decision Report → 写最终报告
+- **Python 模块做什么**:
+  1. `retrieval/dual_source_search.py` — 并行查询 NCT/ChiCTR
+  2. `extraction/trial_metadata_extractor.py` — 结构化抽取 treatment_line / disease_stage / mutation / HLA / biomarker / trial_type
+  3. `scoring/gating.py` — Blocker vs Advisor 硬筛选 → match / conditional / exclude
+  4. `verification/nct_verifier.py` — 实时 CT.gov v2 校验 + citation chain
+  5. `scoring/feasibility.py` — 5 维 feasibility score
+  6. `scoring/risk_lookup.py` — risk_taxonomy.json lookup
+  7. `synthesis/efficacy_lookup.py` — efficacy_database.json + soc_benchmarks.json
+  8. `synthesis/decision_paths.py` — Top N 决策路径合成（diversity + bucketed selection）
+  9. `synthesis/html_renderer.py` — 双层 HTML 输出 (Decision Report + Match List)
+
+整体编排脚本: `scripts/run_v160_pipeline.sh`。
+
+**v1.6 输出双层结构**:
+
+```
+Layer A — Decision Report (前置渲染)
+  ├── Patient summary card
+  ├── Consistency banner (P2.1)
+  ├── Goals of Care section (P2.2, 条件触发)
+  ├── Top N decision paths
+  │   ├── Path #1 (主推 / 域内 / 高 feasibility)
+  │   ├── Path #2 (备选 / 海外 / 替代机制)
+  │   └── Path #3 (备选 / cell therapy / 不同 sponsor)
+  │   每个 path 含: 疗效快照 + vs SoC + feasibility radar + risks + timeline + blockers
+  └── SoC benchmarks (患者当前线的标准治疗)
+
+Layer B — Match List (折叠在 Decision Report 之后)
+  ├── 高匹配 (full inventory)
+  ├── 条件匹配
+  └── 已排除
+```
 
 ```
 Step 0: 前置依赖检查
@@ -473,5 +542,61 @@ bash scripts/setup-chictr-mcp.sh
 - TrialGPT: https://github.com/ncbi-nlp/TrialGPT
 - ChiCTR MCP Server: https://github.com/PancrePal-xiaoyibao/chictr-mcp-server
 - ChiCTR 官网: https://www.chictr.org.cn/
+
+## Generalization Principle (v1.7.1+)
+
+> **Code is mechanism. Data is knowledge.**
+>
+> A new cancer type, drug class, or chemo regimen MUST be addable through data files only.
+> No code changes should be required for clinical knowledge extension.
+>
+> **Validated on 3 cancer × molecular subtypes:**
+> - case_01: PDAC + KRAS G12D, post-FOLFIRINOX 1L → ✅ PASS
+> - case_02: PDAC + KRAS G12C, post-AG 1L → ✅ PASS
+> - case_03: NSCLC + EGFR L858R/T790M, post-osimertinib → ✅ PASS
+
+See [`repo/data/EXTENSION_GUIDE.md`](repo/data/EXTENSION_GUIDE.md) for how to add a new cancer.
+
+### What's data, what's code
+
+| Type | Where it lives |
+|---|---|
+| Cancer aliases / anti-aliases | `repo/data/clinical_ontology.json` |
+| OS thresholds per (cancer, line) | `repo/data/clinical_ontology.json` |
+| Chemo regimen → component drug list | `repo/data/clinical_ontology.json` |
+| Prior-therapy class → drug list | `repo/data/clinical_ontology.json` |
+| Biomarker aliases | `repo/data/clinical_ontology.json` |
+| Mechanism × cancer risk narratives | `repo/data/risk_taxonomy.json` |
+| NCT-level + drug-class efficacy | `repo/data/efficacy_database.json` |
+| Standard-of-care per cancer × line | `repo/data/soc_benchmarks.json` |
+| **Lookup mechanism (any of the above)** | `repo/data/ontology_loader.py` (the only code that knows about the ontology schema) |
+
+## v1.6.0 file map
+
+| File | Purpose |
+|------|---------|
+| `repo/extraction/trial_metadata_extractor.py` | Structured metadata (P0.4): treatment line, disease stage, mutation, HLA, biomarker, trial_type |
+| `repo/scoring/gating.py` | Blocker vs Advisor gating (P0.3) |
+| `repo/scoring/feasibility.py` | 5-dim feasibility scoring (P0.2) |
+| `repo/scoring/risk_lookup.py` | Risk taxonomy lookup (P1.3) |
+| `repo/verification/nct_verifier.py` | Enhanced NCT verification + citation chain (P2.3) |
+| `repo/synthesis/efficacy_lookup.py` | Efficacy + SoC lookup (P1.1 + P1.2) |
+| `repo/synthesis/consistency_check.py` | Patient profile internal-consistency (P2.1) |
+| `repo/synthesis/goals_of_care.py` | Goals of Care trigger (P2.2) |
+| `repo/synthesis/decision_paths.py` | Top N synthesis with diversity (P0.1) |
+| `repo/synthesis/html_renderer.py` | Dual-layer HTML output |
+| `repo/data/risk_taxonomy.json` | Mechanism × cancer risk catalog |
+| `repo/data/efficacy_database.json` | NCT-level + drug-class efficacy snapshots |
+| `repo/data/soc_benchmarks.json` | Standard-of-care benchmarks per cancer × line |
+| `repo/eval/runner.py` | Golden-case eval + metric tracking |
+| `repo/eval/golden_cases/*.json` | Test cases (PDAC G12D / G12C / NSCLC EGFR) |
+| `repo/retrieval/chictr_resilient.py` | ChiCTR retry / circuit breaker (M1) |
+| `scripts/run_v160_pipeline.sh` | End-to-end orchestration |
+
+## v1.6.0 deferred to v1.7
+
+- M4 — cohort-level reasoning (trials with multi-arm cohort-specific eligibility)
+- Expand golden test set to 30 cases (currently 3)
+- LLM-assisted metadata extraction (currently regex-heuristic)
 
 
