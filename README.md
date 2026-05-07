@@ -12,13 +12,38 @@ A Claude Code skill for matching oncology patients (especially Chinese patients)
 
 ### Install
 
+Using the [`skills` CLI](https://github.com/vercel-labs/skills) (recommended):
+
+```bash
+# Install all 5 skills (parent + 4 subskills)
+npx skills add CancerDAO/clinical-trial-matching-skill
+
+# Or install a specific subskill standalone (e.g. for testing)
+npx skills add CancerDAO/clinical-trial-matching-skill --skill trial-gater
+
+# Or install globally (user-level instead of project-level)
+npx skills add CancerDAO/clinical-trial-matching-skill -g
+```
+
+The CLI auto-detects your agent (Claude Code, Codex, Cursor, etc.) and symlinks the skills into the right directory. See the [skills CLI docs](https://github.com/vercel-labs/skills) for all options.
+
+Then register the ChiCTR MCP server (one-time):
+
+```bash
+bash ~/.claude/skills/clinical-trial-matching/scripts/setup-chictr-mcp.sh
+```
+
+Restart Claude Code.
+
+<details>
+<summary>Manual install (without the CLI)</summary>
+
 ```bash
 git clone https://github.com/CancerDAO/clinical-trial-matching-skill.git
 cp -r clinical-trial-matching-skill/skills/* ~/.claude/skills/
 bash ~/.claude/skills/clinical-trial-matching/scripts/setup-chictr-mcp.sh
 ```
-
-Restart Claude Code.
+</details>
 
 ### Use
 
@@ -88,18 +113,32 @@ For agents working on the codebase, see [`AGENTS.md`](./AGENTS.md).
 
 ---
 
-## Adding a new cancer type
+## Cancer type coverage
 
 > **Code is mechanism. Knowledge is in subskills.**
 
-You should never need to edit Python or extend a JSON lookup table to add clinical knowledge. To support a new cancer:
+**All cancer types are supported out of the box.** The LLM subskills generate eligibility judgments, risk narratives, efficacy estimates, and SoC comparisons from training knowledge, regardless of cancer type.
 
-1. Add the cancer's aliases / chemo regimens to [`skills/clinical-trial-matching/data/clinical_ontology.json`](skills/clinical-trial-matching/data/clinical_ontology.json)
-2. Add `skills/trial-efficacy-contextualizer/rules/soc-{cancer}-by-line.md` with the standard-of-care benchmarks per line
+The repo ships **detailed rule templates for the highest-volume cancers** as accuracy boosters:
+
+| Cancer | SoC rules | Risk rules |
+|---|---|---|
+| CRC (colorectal) | [`soc-crc-by-line.md`](skills/trial-efficacy-contextualizer/rules/soc-crc-by-line.md) | [KRAS G12C](skills/trial-risk-annotator/rules/risk-kras-g12c-by-cancer.md) (CRC section), [bispecific MSS CRC](skills/trial-risk-annotator/rules/risk-bispecific-mss-crc.md) |
+| NSCLC | [`soc-nsclc-by-line.md`](skills/trial-efficacy-contextualizer/rules/soc-nsclc-by-line.md) | [KRAS G12C](skills/trial-risk-annotator/rules/risk-kras-g12c-by-cancer.md) (NSCLC section) |
+| PDAC (pancreatic) | [`soc-pdac-by-line.md`](skills/trial-efficacy-contextualizer/rules/soc-pdac-by-line.md) | [KRAS G12D class](skills/trial-risk-annotator/rules/risk-kras-g12d-class.md), [pan-RAS](skills/trial-risk-annotator/rules/risk-pan-ras-class.md) |
+| Other (gastric, HCC, breast, ovarian, prostate, sarcoma, glioma, …) | LLM falls back to training knowledge | LLM falls back to training knowledge |
+
+For uncovered cancers, the subskills generate output from training knowledge and emit honest "no published class data" tags where relevant — they don't fabricate.
+
+### Want tighter accuracy for your cancer of interest?
+
+Contribute a rule file. No code change needed:
+
+1. Add aliases / chemo regimens to [`skills/clinical-trial-matching/data/clinical_ontology.json`](skills/clinical-trial-matching/data/clinical_ontology.json)
+2. Add `skills/trial-efficacy-contextualizer/rules/soc-{cancer}-by-line.md` (SoC benchmarks per line, with citations)
 3. (Optional) Add `skills/trial-risk-annotator/rules/risk-{mechanism}-{cancer}.md` for cancer-specific mechanism risks
-4. Add a worked example to `skills/clinical-trial-matching/examples/`
 
-No code change required. The LLM subskills consume the new rule files automatically on the next invocation.
+The next invocation picks up the new rule files automatically.
 
 ---
 
