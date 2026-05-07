@@ -114,7 +114,7 @@ v2: every efficacy claim must name (cancer × mutation × line) explicitly and e
    b. Same drug + different line → mutation_class_baseline (note caveat)
    c. Same class + same cancer → drug_class_baseline (cancer-specific!)
    d. Same class + different cancer → DO NOT use unless explicitly noted as exploratory
-5. List patient's SoC options at current line (use rules/soc-{cancer}-by-line.md)
+5. List patient's SoC options at current line — use your training knowledge of the cancer's published guidelines (NCCN / CSCO / ESMO) and pivotal trial data
 6. Compose head-to-head comparison
 ```
 
@@ -130,20 +130,21 @@ v2: every efficacy claim must name (cancer × mutation × line) explicitly and e
 | `drug_class_baseline_other_cancer` | Same class, different cancer | Use ONLY with explicit cross-cancer caveat |
 | `no_data` | No published analog | Honest "no data" — do not invent estimates |
 
-## Cancer-specific SoC reference
+## SoC knowledge source
 
-- [SoC for CRC by line](rules/soc-crc-by-line.md) — covers 1L through 4L+, including KRAS G12C-specific options
-- [SoC for NSCLC by line](rules/soc-nsclc-by-line.md) — covers EGFR, ALK, KRAS G12C, no-driver subgroups
-- [SoC for PDAC by line](rules/soc-pdac-by-line.md) — covers FOLFIRINOX/AG paradigm + KRAS G12D emerging options
+For the patient's cancer + treatment line, list the relevant SoC options from your training knowledge of NCCN / CSCO / ESMO guidelines and pivotal trials. Prioritize:
+
+- **Approved combos for the patient's molecular subtype first** (e.g. for KRAS G12C mCRC 2L+: sotorasib + panitumumab per CodeBreaK 300, FDA approved 2024)
+- **Standard chemo-refractory options** (e.g. for 3L mCRC: regorafenib / TAS-102 ± bevacizumab / fruquintinib)
+- **Cancer-specific recent additions** (post-2024 pivotal trial readouts)
+
+Cite trial names + key metrics (ORR, mPFS, mOS) — your output is consumed by downstream synthesis that will surface these to clinicians, who will check citations.
+
+The repo previously shipped per-cancer SoC reference files (`soc-crc-by-line.md` etc.) — these were removed because the LLM has this knowledge in training and the files added maintenance burden without accuracy benefit. If a clinician requests citation lock-in for reproducibility, the user can re-introduce per-cancer SoC rule files.
+
+## Output
+
 - [Output schema](rules/output-efficacy-context-schema.md)
-
-## Rules for adding a new cancer type
-
-When the parent skill encounters a cancer not in the rules/ directory:
-
-1. Generate efficacy + SoC inline using your training knowledge
-2. Be explicit about evidence tier per metric
-3. Suggest the user add a `rules/soc-{cancer}-by-line.md` file for future runs
 
 ## Mandatory grounding
 

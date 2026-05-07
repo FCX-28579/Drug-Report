@@ -107,7 +107,7 @@ skills/
   decision-synthesizer/            # Top-N decision paths + GoC trigger + diversity
 ```
 
-Each skill has its own `SKILL.md` and a `rules/` directory with prefix-named markdown files (e.g. `R1-prior-same-class-drug.md`, `risk-kras-g12c-by-cancer.md`, `soc-crc-by-line.md`).
+Each skill has its own `SKILL.md` and a `rules/` directory with prefix-named markdown files (e.g. `R1-prior-same-class-drug.md`, `risk-kras-g12c-by-cancer.md`).
 
 For agents working on the codebase, see [`AGENTS.md`](./AGENTS.md).
 
@@ -117,28 +117,28 @@ For agents working on the codebase, see [`AGENTS.md`](./AGENTS.md).
 
 > **Code is mechanism. Knowledge is in subskills.**
 
-**All cancer types are supported out of the box.** The LLM subskills generate eligibility judgments, risk narratives, efficacy estimates, and SoC comparisons from training knowledge, regardless of cancer type.
+**All cancer types are supported out of the box.** The LLM subskills generate eligibility judgments, efficacy estimates, and SoC comparisons from training knowledge of NCCN / CSCO / ESMO guidelines and pivotal trials — no per-cancer table maintenance.
 
-The repo ships **detailed rule templates for the highest-volume cancers** as accuracy boosters:
+Where the repo *does* ship anchored rule files is for **risk narratives that historically cross-leaked between cancer types** (the v1.7.x bug pattern: PDAC-specific risk text appearing on CRC reports). These are pinned per (mechanism × cancer) to lock the grounding:
 
-| Cancer | SoC rules | Risk rules |
-|---|---|---|
-| CRC (colorectal) | [`soc-crc-by-line.md`](skills/trial-efficacy-contextualizer/rules/soc-crc-by-line.md) | [KRAS G12C](skills/trial-risk-annotator/rules/risk-kras-g12c-by-cancer.md) (CRC section), [bispecific MSS CRC](skills/trial-risk-annotator/rules/risk-bispecific-mss-crc.md) |
-| NSCLC | [`soc-nsclc-by-line.md`](skills/trial-efficacy-contextualizer/rules/soc-nsclc-by-line.md) | [KRAS G12C](skills/trial-risk-annotator/rules/risk-kras-g12c-by-cancer.md) (NSCLC section) |
-| PDAC (pancreatic) | [`soc-pdac-by-line.md`](skills/trial-efficacy-contextualizer/rules/soc-pdac-by-line.md) | [KRAS G12D class](skills/trial-risk-annotator/rules/risk-kras-g12d-class.md), [pan-RAS](skills/trial-risk-annotator/rules/risk-pan-ras-class.md) |
-| Other (gastric, HCC, breast, ovarian, prostate, sarcoma, glioma, …) | LLM falls back to training knowledge | LLM falls back to training knowledge |
+- [KRAS G12C inhibitor by cancer](skills/trial-risk-annotator/rules/risk-kras-g12c-by-cancer.md) — NSCLC vs CRC vs PDAC sections (efficacy and risk profile differ markedly)
+- [KRAS G12D class](skills/trial-risk-annotator/rules/risk-kras-g12d-class.md) — primarily PDAC
+- [Pan-RAS / RAS-ON class](skills/trial-risk-annotator/rules/risk-pan-ras-class.md)
+- [Cell therapy in solid tumors](skills/trial-risk-annotator/rules/risk-cell-therapy-solid-tumor.md)
+- [Bispecific antibody in MSS CRC](skills/trial-risk-annotator/rules/risk-bispecific-mss-crc.md)
+- [Phase 1 dose escalation overlay](skills/trial-risk-annotator/rules/risk-phase-1-dose-escalation.md)
 
-For uncovered cancers, the subskills generate output from training knowledge and emit honest "no published class data" tags where relevant — they don't fabricate.
+For mechanisms / cancers not in this list, the LLM generates risk narratives from training knowledge — the schema still requires explicit `applies_because: (mechanism × cancer × patient)` grounding so cross-cancer leaks can't happen.
 
 ### Want tighter accuracy for your cancer of interest?
 
-Contribute a rule file. No code change needed:
+If your clinical use case needs reproducibility lock-in (e.g. for regulatory audit), you can re-introduce per-cancer SoC reference files. Contribute a rule file — no code change needed:
 
 1. Add aliases / chemo regimens to [`skills/clinical-trial-matching/data/clinical_ontology.json`](skills/clinical-trial-matching/data/clinical_ontology.json)
-2. Add `skills/trial-efficacy-contextualizer/rules/soc-{cancer}-by-line.md` (SoC benchmarks per line, with citations)
-3. (Optional) Add `skills/trial-risk-annotator/rules/risk-{mechanism}-{cancer}.md` for cancer-specific mechanism risks
+2. Add `skills/trial-efficacy-contextualizer/rules/soc-{cancer}-by-line.md` (SoC benchmarks per line, with PMID citations) — the subskill will prefer file content over training knowledge when present
+3. Add `skills/trial-risk-annotator/rules/risk-{mechanism}-{cancer}.md` for cancer-specific mechanism risks
 
-The next invocation picks up the new rule files automatically.
+The next invocation picks up new rule files automatically.
 
 ---
 

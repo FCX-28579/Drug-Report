@@ -34,20 +34,36 @@ Is this change about WHAT clinical knowledge applies?
   YES → Rule change (in skills/{subskill}/rules/)
 
 Common cases:
-  - Add new cancer type's SoC                  → rules change (trial-efficacy-contextualizer/rules/soc-{cancer}-by-line.md)
-  - Add new drug class                          → rules change (trial-risk-annotator/rules/risk-{class}.md + clinical_ontology.therapy_classes)
-  - Add new pivotal trial efficacy data         → rules change (cite in soc-{cancer}-by-line.md)
+  - Add new cancer type's SoC                  → usually no change needed (LLM uses training knowledge);
+                                                  add trial-efficacy-contextualizer/rules/soc-{cancer}-by-line.md
+                                                  ONLY if you need citation lock-in for regulatory audit
+  - Add new drug class                          → rules change (trial-risk-annotator/rules/risk-{class}.md
+                                                  + add to clinical_ontology.therapy_classes if R1 needs to detect prior exposure)
+  - Add new mechanism × cancer risk pattern    → rules change (trial-risk-annotator/rules/risk-{mechanism}-{cancer}.md);
+                                                  this is HIGH leverage — risk narratives historically cross-leak
   - Fix a regex parsing bug in eligibility text → Python change (dual_source_search.py)
   - Add a new feasibility dimension             → Python change (feasibility.py) — note: new "dimensions" rarely justified
   - Adjust GoC trigger threshold                → rules change (synthesis-goals-of-care-trigger.md)
   - Fix HTML rendering issue                    → Python change (html_renderer.py + template.html)
 ```
 
+### Why no per-cancer SoC files by default?
+
+The repo previously shipped `soc-{crc,nsclc,pdac}-by-line.md` (~150 lines each of NCCN-style SoC tables). They were removed because:
+
+- The LLM has this knowledge from training (NCCN / CSCO / ESMO are widely-published)
+- Maintenance cost was high (every guideline update meant a PR)
+- For uncovered cancers, the LLM was already falling back to training knowledge — files weren't actually load-bearing
+
+Per-(mechanism × cancer) **risk** files are kept because risk narratives have a real cross-cancer leak failure mode (v1.7.x leaked PDAC risk text onto CRC reports). Pinning is worth the maintenance there.
+
+If a clinical use case needs reproducibility lock-in for SoC (regulatory audit, etc.), re-introduce per-cancer SoC rule files following the original pattern. The subskill prefers file content over training knowledge when present.
+
 ### Naming conventions
 
 - **Skill directory**: `kebab-case` (e.g. `trial-gater`)
 - **SKILL.md**: always uppercase exact filename
-- **Rule files**: `{prefix}-{descriptor}.md` (e.g. `R1-prior-same-class-drug.md`, `risk-kras-g12c-by-cancer.md`, `soc-crc-by-line.md`)
+- **Rule files**: `{prefix}-{descriptor}.md` (e.g. `R1-prior-same-class-drug.md`, `risk-kras-g12c-by-cancer.md`)
 - **Output schema files**: `output-{topic}-schema.md`
 - **Python files**: `snake_case.py`
 
@@ -99,7 +115,7 @@ The following are tempting but wrong:
 Follow the existing project convention (Conventional Commits):
 
 - `feat(skill-name): add X`
-- `fix(rule): correct Y in soc-crc-by-line.md`
+- `fix(rule): correct Y in risk-kras-g12c-by-cancer.md`
 - `docs(readme): update install instructions`
 - `refactor(scripts): extract feasibility scoring into module`
 - `chore: bump version to v2.x.x`

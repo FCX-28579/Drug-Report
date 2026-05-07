@@ -16,7 +16,7 @@
 
 1. **PDAC risk text leaking onto CRC reports** (v1.7.x `risk_lookup.py` keyed on mechanism only). Fixed by `trial-risk-annotator` requiring `applies_because: (mechanism × cancer × patient)` grounding for every risk.
 2. **KRAS G12D drug class baseline applied to KRAS G12C patient** (v1.7.x `efficacy_lookup.py` matched on "RAS mutation (any)"). Fixed by `trial-efficacy-contextualizer` requiring drug class to match patient mutation.
-3. **CRC SoC database had only 1 entry** (v1.7.x `soc_benchmarks.json` had only `metastatic_1L_BRAF_V600E`). Fixed by `trial-efficacy-contextualizer/rules/soc-crc-by-line.md` covering 1L through 4L+ across all RAS/MSI subtypes.
+3. **CRC SoC database had only 1 entry** (v1.7.x `soc_benchmarks.json` had only `metastatic_1L_BRAF_V600E`). Fixed by `trial-efficacy-contextualizer` reading SoC from LLM training knowledge (NCCN / CSCO / ESMO guidelines + pivotal trials), with the schema enforcing explicit `evidence_source.tier` and `applies_because` for auditability.
 4. **R1 hard rule (prior same-class drug → demote) silently failed** for patients with prior anti-PD-1 / anti-VEGF (v1.7.x regex was hardcoded to KRAS-specific phrasings). Fixed by `trial-gater/rules/R1-prior-same-class-drug.md` with comprehensive drug class reference.
 5. **GoC trigger missed L3+ patients** (v1.7.x used `treatment_lines_completed` ignoring ongoing line). Fixed by `decision-synthesizer/rules/synthesis-goals-of-care-trigger.md` using `effective_line = completed + (1 if ongoing else 0)`.
 6. **`run_v160_pipeline.sh` `cd` to `$REPO` broke relative `--patient` path**. Fixed by removing the orchestration shell script (subskills are dispatched via Agent tool from parent SKILL.md, no path-juggling needed).
